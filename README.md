@@ -4,7 +4,7 @@ Minimalist, Fast and Simple shell in C.
 ## ✨ Features
 
 - 🧠 **Command History**  
-  Navigate through previously entered commands using the ↑ arrow key.
+  Navigate through previously entered commands using the ↑ arrow key and 󰁅 arrow key.
 
 - 📁 **Path-Aware Prompt**  
   Displays the current working directory dynamically as part of the prompt.
@@ -34,6 +34,7 @@ minshell/
 - 💯 Lua Support for Scripting and Configuration.
 - 🎖️ Smarter history support.
 - 🗒️ TAB Completion.
+- ⚠️ fork()/execvp() calls instead of system().
 
 # LICENSE
 This project is licensed under the **GPL-3.0 License**.

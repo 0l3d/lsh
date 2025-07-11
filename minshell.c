@@ -26,7 +26,11 @@ void init_shell() {
   }
 
   prompt(pwd);
+<<<<<<< HEAD
   
+=======
+
+>>>>>>> 72595be (Add: Smarter history implementation.)
   char *history[100] = {0};
   if (history == NULL) {
     fprintf(stderr, "Memory Allocation error.");
@@ -39,7 +43,11 @@ void init_shell() {
   while (1) {
     ssize_t n = read(STDIN_FILENO, buffer, 1);
     if (n <= 0) continue;
+<<<<<<< HEAD
     
+=======
+
+>>>>>>> 72595be (Add: Smarter history implementation.)
     if (buffer[0] == '\n' || buffer[0] == '\r') { // ENTER IMPLEMENTATION
       printf("\n");
       fflush(stdout);
@@ -83,9 +91,15 @@ void init_shell() {
       if (n < 0) {
         perror("read");
       }
+<<<<<<< HEAD
       if (buffer[1] == '[') {  
 	switch (buffer[2]) {
 	case 'A': // HISTORY IMPLEMENTATION
+=======
+      if (buffer[1] == '[') {
+	switch (buffer[2]) {
+	case 'A': // HISTORY IMPLEMENTATION UP ARROW 
+>>>>>>> 72595be (Add: Smarter history implementation.)
 	  if (history_cur > 0) {
 	    history_cur--;
 	    printf("\33[2K\r");
@@ -107,11 +121,33 @@ void init_shell() {
 	  printf("\x1b[C");
 	  fflush(stdout);
 	  break;
+<<<<<<< HEAD
 	}
         continue;
       }
     }
     
+=======
+	case 'B': // HISTORY IMPLEMENTATION DOWN ARROW 
+	  if (history_cur + 1 < history_i && history[history_cur + 1]) {
+	    history_cur++;
+	    printf("\33[2K\r");
+	    prompt(pwd);
+	    strcpy(command, history[history_cur]);
+	    command_index = strlen(command);
+	    printf("%s", command);
+	    fflush(stdout);
+	    break;
+	  } else {
+	    break;
+	  }
+	  continue;
+	}
+      }
+      memset(&buffer, 0, sizeof(buffer));
+    }
+
+>>>>>>> 72595be (Add: Smarter history implementation.)
     if (command_index < 255) {
       command[command_index++] = buffer[0];
       command[command_index] = '\0';
