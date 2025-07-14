@@ -1,40 +1,32 @@
 # MINSHELL
 Minimalist, Fast and Simple shell in C.
 
-## ✨ Features
+## Features
 
-- 🧠 **Command History**  
+- **Command History**  
   Navigate through previously entered commands using the ↑ arrow key and 󰁅 arrow key.
 
-- 📁 **Path-Aware Prompt**  
+- **Path-Aware Prompt**  
   Displays the current working directory dynamically as part of the prompt.
 
-- 💻 **Built-in `cd` and `exit` commands**  
+- **Built-in `cd` and `exit` commands**  
   Easily change directories or exit the shell like in any standard terminal.
 
-- 🚫 **Raw mode input handling**  
+- **Raw mode input handling**  
   Captures keystrokes directly for responsive editing and key navigation.
 
-## 🚀 Installation
+## Installation
 
 ```bash
 gcc minshell.c -o minshell
 ./minshell
 ```
 
-## 📂 Project Structure
-```
-minshell/
-├── minshell.c           # Shell Code
-├── LICENSE.md           # LICENCSE text
-└── README.md            # This file.
-```
-
-## ⌛ Planned Features
-- 💯 Lua Support for Scripting and Configuration.
-- 🎖️ Smarter history support.
-- 🗒️ TAB Completion.
-- ⚠️ fork()/execvp() calls instead of system().
+##  Planned Features
+-  Lua Support for Scripting and Configuration.
+-  Smarter history support.
+-  TAB Completion.
+-  fork()/execvp() calls instead of system().
 
 # LICENSE
 This project is licensed under the **GPL-3.0 License**.
