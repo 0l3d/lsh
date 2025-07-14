@@ -7,14 +7,13 @@
 #include <termios.h>
 #include <unistd.h>
 #include <ctype.h>
+#include <fcntl.h>
+
 // gcc minshell.c -I/usr/include/lua5.4 -L/usr/lib/ -Wl,-Bstatic -llua5.4 -Wl,-Bdynamic -lc -lm -o minshell
 
-
-typedef struct {
-  char* command;
-  char* args[100];
-  int arg_count;
-} Command;
+#define MAX_TOKENS 200
+#define MAX_LEFT_PIPES 30
+#define MAX_RIGHT_PIPES 30
 
 struct termios orig_set, new_set;
 
@@ -23,12 +22,10 @@ void prompt(char *path) {
   fflush(stdout);
 }
 
-void process(char* command, char *output, size_t size) {
-  int amaster[2];
+void process(char* command[]) {
   pid_t pid;
-  int nbytes;
 
-  pid = forkpty(amaster, NULL, NULL, NULL);
+  pid = fork();
   if (pid == -1) {
     fprintf(stderr, "forkpty is failed");
     return;
@@ -36,20 +33,13 @@ void process(char* command, char *output, size_t size) {
   
 
   if (pid == 0) {
-    if (execlp("ls", "ls", NULL) == -1) {
+    if (execvp(command[0], command) == -1) {
       perror("Command execution failed: ");
       return;
     } else {
       printf("command is not executed");
     }
   } else {
-    size_t total = 0;
-    
-    while ((nbytes = read(amaster[0], output + total, size - total - 1)) > 0) {
-      total += nbytes;
-      printf("%s", output);
-    }
-    output[total] = '\0';
     waitpid(pid, NULL, 0);
   }
 }
@@ -94,7 +84,6 @@ int command_lexer(char* bufin, char* bufout[], int max_count) {
   return token_count;
 }
 
-
 void interface() {
   tcgetattr(STDIN_FILENO, &orig_set);
   new_set = orig_set;
@@ -122,6 +111,7 @@ void interface() {
       fflush(stdout);
       history[history_i++] = strdup(command);
       history_cur = history_i;
+      
       if (strcmp(command, "exit") == 0) {
         break;
       } else if (strncmp(command, "cd ", 3) == 0) { // CD COMMAND
@@ -137,9 +127,60 @@ void interface() {
         prompt(pwd);
         continue;
       } else {
-        fflush(stdout);
-        // process(command);
-        command_index = 0;
+	char* tokens[MAX_TOKENS];
+	int special_proc = 0;
+	int tokenc = command_lexer(command, tokens, MAX_TOKENS);
+	for (int i = 0; i < tokenc; i++) {
+	  if (strcmp(tokens[i], "<") == 0) {
+	    special_proc = 1;
+	    pid_t pid = fork();
+	    if (pid == -1) {
+	      perror("fork is failed");
+	      break;
+	    }
+	    if (pid == 0) {
+	      int fd = open(tokens[i + 1], O_RDONLY);
+	      if (fd == -1) {
+		perror("file open failed");
+		break;
+	      }
+	      dup2(fd, 0);
+	      close(fd);
+	      tokens[i] = NULL;
+	      execvp(tokens[0], tokens);
+	    } else {
+	      waitpid(pid, NULL, 0);
+	    }
+	  } else if (strcmp(tokens[i], ">") == 0) {
+	    special_proc = 1;
+	    pid_t pid = fork();
+	    if (pid == -1) {
+	      perror("fork is failed");
+	      break;
+	    }
+
+	    if (pid == 0) {
+	      int fd = open(tokens[i + 1], O_WRONLY | O_CREAT | O_TRUNC, 0644);
+	      if (fd == -1) {
+		perror("file open failed");
+		break;
+	      }
+
+	      dup2(fd, STDOUT_FILENO);
+	      close(fd);
+	      tokens[i] = NULL;
+	      execvp(tokens[0], tokens);
+	    }
+	  } else if (strcmp(tokens[i], "|") == 0) {
+	    special_proc = 1;
+	    // COMING SOON
+	    
+	  }
+	}
+	if (!special_proc) {
+	  process(tokens);
+	}
+	command_index = 0;
         memset(command, 0, sizeof(command));
         prompt(pwd);
         continue;
@@ -213,20 +254,6 @@ void interface() {
 }
 
 int main() {
-  //  interface();
-
-  char input[] = "ls -la > lsout < echo \"finished\"";
-  char* tokens[100];
-
-  int count = command_lexer(input, tokens, 100);
-
-  for (int i = 0; i < count; i++) {
-    printf(": %s\n", tokens[i]);
-  }
-
-  for(int i = 0; i < count; i++) {
-    free(tokens[i]);
-  }
-  
+  interface();
   return 0;
 }
