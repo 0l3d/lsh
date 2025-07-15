@@ -8,12 +8,12 @@
 #include <unistd.h>
 #include <ctype.h>
 #include <fcntl.h>
+#include <sys/types.h>
 
 // gcc minshell.c -I/usr/include/lua5.4 -L/usr/lib/ -Wl,-Bstatic -llua5.4 -Wl,-Bdynamic -lc -lm -o minshell
 
 #define MAX_TOKENS 200
-#define MAX_LEFT_PIPES 30
-#define MAX_RIGHT_PIPES 30
+#define MAX_PIPES 100
 
 struct termios orig_set, new_set;
 
@@ -128,7 +128,14 @@ void interface() {
         continue;
       } else {
 	char* tokens[MAX_TOKENS];
+
+	// PIPE HANDLING
 	int special_proc = 0;
+	int its_pipe = 0;
+	int c_pipe = 0;
+	int c_pipe_pos[MAX_PIPES];
+	// PIPE HANDLING
+	
 	int tokenc = command_lexer(command, tokens, MAX_TOKENS);
 	for (int i = 0; i < tokenc; i++) {
 	  if (strcmp(tokens[i], "<") == 0) {
@@ -173,11 +180,56 @@ void interface() {
 	    }
 	  } else if (strcmp(tokens[i], "|") == 0) {
 	    special_proc = 1;
-	    // COMING SOON
+	    c_pipe_pos[c_pipe++] = i;
+	    its_pipe = 1;
 	    
 	  }
 	}
-	if (!special_proc) {
+
+	if (its_pipe) {
+	  int start = 0;
+	  int prev_fd;
+	  for (int i = 0; i <= c_pipe; i++) {
+	    int end = (i < c_pipe) ? c_pipe_pos[i] : tokenc;
+	    int fd[2];
+	    char* pipetok[MAX_TOKENS];
+	    if (pipe(fd) < 0) exit(1);
+	    
+	    pid_t pid = fork();
+	    if (pid == -1) {
+	      perror("fork is failed");
+	      break;
+	    }
+	    if (pid == 0) {
+	      int pipetok_i = 0;
+	      for (int k = start; k < end; k++) {
+		pipetok[pipetok_i++] = tokens[k];
+	      }
+	      pipetok[pipetok_i] = NULL;
+	      if (start == 0) {
+		dup2(fd[1], STDOUT_FILENO);
+	      } else if (end == tokenc) {
+		dup2(prev_fd, STDIN_FILENO);
+	      } else {
+		dup2(prev_fd, STDIN_FILENO);
+		dup2(fd[1], STDOUT_FILENO);
+	      }
+	      close(fd[0]);
+	      execvp(pipetok[0], pipetok);
+	      exit(0);
+	    } else  {
+	      close(fd[1]);
+	      if (start != 0) {
+		close(prev_fd);
+	      }
+	      prev_fd = fd[0];
+	      waitpid(pid, NULL, 0);
+	    }
+	    start = end + 1;
+	  }
+	}
+	
+	if (!special_proc && !its_pipe) {
 	  process(tokens);
 	}
 	command_index = 0;
