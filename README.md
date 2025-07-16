@@ -26,7 +26,7 @@ gcc minshell.c -o minshell
 -  Lua Support for Scripting and Configuration.
 -  Smarter history support.
 -  TAB Completion.
--  fork()/execvp() calls instead of system().
+-  Good pipe handling
 
 # LICENSE
 This project is licensed under the **GPL-3.0 License**.
