@@ -1,3 +1,4 @@
+#include "libhalloc/halloc.h"
 #include <ctype.h>
 #include <fcntl.h>
 #include <limits.h>
@@ -49,21 +50,21 @@ int command_lexer(char *bufin, char *bufout[], int max_count) {
   const char *p = bufin;
   while (*p != '\0') {
     if (p[0] == '>' && p[1] == '(') {
-      char *sub = malloc(3);
+      char *sub = halloc_safe(3);
       sub[0] = '>';
       sub[1] = '(';
       sub[2] = '\0';
       bufout[token_count++] = sub;
       p += 2;
     } else if (p[0] == '<' && p[1] == '(') {
-      char *sub = malloc(3);
+      char *sub = halloc_safe(3);
       sub[0] = '<';
       sub[1] = '(';
       sub[2] = '\0';
       bufout[token_count++] = sub;
       p += 2;
     } else if (p[0] == ')') {
-      char *subr = malloc(2);
+      char *subr = halloc_safe(2);
       subr[0] = ')';
       subr[1] = '\0';
       bufout[token_count++] = subr;
@@ -74,7 +75,7 @@ int command_lexer(char *bufin, char *bufout[], int max_count) {
     } else if (*p == '\0')
       break;
     else if (*p == '>' || *p == '<' || *p == '|') {
-      char *sym = malloc(2);
+      char *sym = halloc_safe(2);
       sym[0] = *p;
       sym[1] = '\0';
       bufout[token_count] = sym;
@@ -86,7 +87,7 @@ int command_lexer(char *bufin, char *bufout[], int max_count) {
       while (*p && *p != in_string)
         p++;
       int stringlen = p - string_start;
-      char *in_string_tokens = malloc(stringlen + 1);
+      char *in_string_tokens = halloc_safe(stringlen + 1);
       strncpy(in_string_tokens, string_start, stringlen);
       in_string_tokens[stringlen] = '\0';
       bufout[token_count++] = in_string_tokens;
@@ -98,7 +99,7 @@ int command_lexer(char *bufin, char *bufout[], int max_count) {
              *p != ')')
         p++;
       int word_len = p - word_start;
-      char *word = malloc(word_len + 1);
+      char *word = halloc_safe(word_len + 1);
       strncpy(word, word_start, word_len);
       word[word_len] = '\0';
       bufout[token_count++] = word;
@@ -112,52 +113,36 @@ int command_lexer(char *bufin, char *bufout[], int max_count) {
 
 void free_tokens(char *tokens[], int count) {
   for (int i = 0; i < count; ++i) {
-    free(tokens[i]);
+    hfree_safe(tokens[i]);
   }
 }
 
-//
-// bash <(curl -s https://github.com) | wc -l | sort <(diff <(command)
-// <(command)) bash /tmp/tempfile | wc -l | sort <(diff /tmp/temp /tmp/temp)
-
-/* typedef struct { */
-/*   int start; */
-/*   int end; */
-/*   char* result; */
-/* } Subs; */
-
-/* char *substitution_manager(char* token[]) { */
-/*   int depth = 0; */
-/*   Subs sub[MAX_SUBS] = {0}; */
-/*   int subs_count = 0; */
-/*   int subsx = 0; */
-/*   int subsy = 0; */
-/*   char* returned[] = {0}; */
-
-/*   for (int i = 0; i < MAX_TOKENS; i++) { */
-/*     if (strncmp(token[i],"<(", 2) == 0) { */
-/*       sub[subsx++].start = i; */
-/*       depth++; */
-/*     } else if (strrchr(token[i], ')') != NULL) { */
-/*       if (depth > 0) { */
-
-/* 	depth--; */
-/*       } else { */
-/* 	fprintf(stderr, "Syntax error ')'"); */
-/* 	break; */
-/*       } */
-/*     } else { */
-/*       returned[i] = token[i]; */
-/*     } */
-
-/*   } */
-
-/*   return ""; */
-/* }  */
-
+int basic_pipe(char *tokens[], int i) {
+  if (strcmp(tokens[i], "<") == 0) {
+    int fd = open(tokens[i + 1], O_RDONLY);
+    if (fd == -1) {
+      perror("file open failed");
+      return -1;
+    }
+    dup2(fd, STDIN_FILENO);
+    close(fd);
+    tokens[i] = NULL;
+    return 1;
+  } else if (strcmp(tokens[i], ">") == 0) {
+    int fd = open(tokens[i + 1], O_WRONLY | O_CREAT | O_TRUNC, 0644);
+    if (fd == -1) {
+      perror("file open failed");
+      return -1;
+    }
+    dup2(fd, STDOUT_FILENO);
+    close(fd);
+    tokens[i] = NULL;
+    return 1;
+  }
+  return 0;
+}
 void command_parser(char *command) {
 
-  // char* token[MAX_TOKENS];
   char *tokens[MAX_TOKENS];
 
   // PIPE HANDLING
@@ -168,103 +153,18 @@ void command_parser(char *command) {
   // PIPE HANDLING
 
   int tokenc = command_lexer(command, tokens, MAX_TOKENS);
+
   for (int i = 0; i < tokenc; i++) {
-    if (strcmp(tokens[i], "<") == 0) {
+    if (strcmp(tokens[i], "<") == 0 || strcmp(tokens[i], ">") == 0) {
       special_proc = 1;
-      pid_t pid = fork();
-      if (pid == -1) {
-        perror("fork is failed");
-        break;
-      }
-      if (pid == 0) {
-        int fd = open(tokens[i + 1], O_RDONLY);
-        if (fd == -1) {
-          perror("file open failed");
-          break;
-        }
-        dup2(fd, 0);
-        close(fd);
-        tokens[i] = NULL;
-        execvp(tokens[0], tokens);
-      } else {
-        waitpid(pid, NULL, 0);
-      }
-    } else if (strcmp(tokens[i], ">") == 0) {
-      special_proc = 1;
-      pid_t pid = fork();
-      if (pid == -1) {
-        perror("fork is failed");
-        break;
-      }
-
-      if (pid == 0) {
-        int fd = open(tokens[i + 1], O_WRONLY | O_CREAT | O_TRUNC, 0644);
-        if (fd == -1) {
-          perror("file open failed");
-          break;
-        }
-
-        dup2(fd, STDOUT_FILENO);
-        close(fd);
-        tokens[i] = NULL;
-        execvp(tokens[0], tokens);
-      }
-    } else if (strcmp(tokens[i], "|") == 0) {
-      special_proc = 1;
-      c_pipe_pos[c_pipe++] = i;
-      its_pipe = 1;
-
-    } else if (strcmp(tokens[i], "@(") == 0) {
-      special_proc = 1;
-      int com_start = 0;
-      char *comm[100];
-      pid_t com_pid = fork();
-      char file_with_id[64];
-      sprintf(file_with_id, "/tmp/lsh_temp_%d", i);
-      if (com_pid == -1) {
-        perror("fork failed");
-        break;
-      }
-      int j = i + 1;
-      while (j < tokenc && strcmp(tokens[j], ")") != 0) {
-        comm[com_start++] = tokens[j++];
-      }
-      if (j == tokenc) {
-        fprintf(stderr, "')' not found.\n");
-        break;
-      }
-
-      if (com_pid == 0) {
-        comm[com_start] = NULL;
-        int fdwrt = open(file_with_id, O_WRONLY | O_CREAT | O_TRUNC, 0644);
-        if (fdwrt == -1) {
-          perror("file open failed");
-          break;
-        }
-        dup2(fdwrt, STDOUT_FILENO);
-        close(fdwrt);
-        execvp(comm[0], comm);
-      } else {
-        waitpid(com_pid, NULL, 0);
-      }
-      pid_t par_pid = fork();
-      if (par_pid == -1) {
-        perror("fork failed");
-        break;
-      }
-      if (par_pid == 0) {
-        int fdrd = open(file_with_id, O_RDONLY);
-        if (fdrd == -1) {
-          perror("file not found in /tmp");
-          break;
-        }
-        dup2(fdrd, STDIN_FILENO);
-        close(fdrd);
-        execvp(tokens[i], tokens);
-      } else {
-        waitpid(par_pid, NULL, 0);
-      }
       break;
+    }
+  }
+
+  for (int i = 0; i < tokenc; i++) {
+    if (strcmp(tokens[i], "|") == 0) {
+      its_pipe = 1;
+      c_pipe_pos[c_pipe++] = i;
     }
   }
 
@@ -298,6 +198,13 @@ void command_parser(char *command) {
           dup2(fd[1], STDOUT_FILENO);
         }
         close(fd[0]);
+        for (int j = 0; pipetok[j] != NULL; j++) {
+          if (strcmp(pipetok[j], "<") == 0 || strcmp(pipetok[j], ">") == 0) {
+            if (basic_pipe(pipetok, j) == -1) {
+              exit(1);
+            }
+          }
+        }
         execvp(pipetok[0], pipetok);
         exit(0);
       } else {
@@ -312,9 +219,25 @@ void command_parser(char *command) {
     }
   }
 
+  if (special_proc && !its_pipe) {
+    pid_t pid = fork();
+    if (pid == 0) {
+      for (int i = 0; i < tokenc; i++) {
+        basic_pipe(tokens, i);
+      }
+      execvp(tokens[0], tokens);
+      perror("exec failed");
+      exit(1);
+    } else {
+      waitpid(pid, NULL, 0);
+    }
+  }
+
   if (!special_proc && !its_pipe) {
     process(tokens);
   }
+
+  free_tokens(tokens, tokenc);
 }
 
 void interface() {
@@ -431,78 +354,13 @@ void interface() {
     }
   }
   tcsetattr(STDIN_FILENO, TCSANOW, &orig_set);
-}
 
-typedef struct {
-  int start;         // <( index
-  int end;           // ) index
-  int depth;         // <( depth )
-  char *result_file; // result file: /tmp/temp
-} Sub;
+  for (int i = 0; i < history_i; ++i) {
+    free(history[i]);
+  }
+}
 
 int main() {
   interface();
-  /*
-  char *code = "echo <(grep error <(cat logfile.txt))";
-  char *buffout[1000] = {0};
-
-  int tokens = command_lexer(code, buffout, 1000);
-  int depth = 0;
-  int next_one = 0;
-  char *tokenized[1000];
-  Sub subs[100] = {0};
-
-  for (int i = 0; i < tokens; i++) {
-    printf("%s\n", buffout[i]);
-    if (strcmp(buffout[i], "<(") == 0) {
-      subs[depth++].start = i;
-    } else if (strcmp(buffout[i], ")") == 0) {
-      if (depth == 0)
-        break;
-      depth--;
-      subs[next_one++].end = i;
-    } else {
-      if (depth > 0)
-        break;
-      tokenized[i] = buffout[i];
-    }
-  }
-
-  int starti = 1;
-  int endi = 0;
-  while (starti >= 0 && endi <= 1) {
-    printf("Start %d: %d\n", starti, subs[starti].start);
-    printf("End %d: %d\n", endi, subs[endi].end);
-
-    int tokenizer = 0;
-    int id = rand();
-    char file[30];
-    sprintf(file, "lsh_%d", id);
-    char *tokenz[100] = {0};
-    for (int i = subs[starti].start + 1; i <= subs[endi].end; i++) {
-      tokenz[tokenizer++] = buffout[i];
-    }
-
-    pid_t pid = fork();
-    if (pid == -1) {
-      perror("fork is failed");
-      break;
-    }
-
-    if (pid == 0) {
-      int fd = open(file, O_WRONLY | O_CREAT | O_TRUNC, 0644);
-      if (fd == -1) {
-        perror("file open failed");
-        break;
-      }
-
-      dup2(fd, STDOUT_FILENO);
-      close(fd);
-      execvp(tokenz[0], tokenz);
-    }
-
-    starti--;
-    endi++;
-  } */
   return 0;
 }

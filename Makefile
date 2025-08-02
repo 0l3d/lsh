@@ -2,7 +2,7 @@ CC=gcc
 CFLAGS= -g -O2  -march=native
 LDFLAGS = -lutil
 TARGET=minshell
-SOURCES=minshell.c
+SOURCES= libhalloc/halloc.c minshell.c
 OBJECTS=$(SOURCES:.c=.o)
 
 all: $(TARGET)
