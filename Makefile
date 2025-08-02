@@ -1,11 +1,12 @@
 CC=gcc
 CFLAGS= -g -O2  -march=native
-LDFLAGS = -lutil
-TARGET=minshell
-SOURCES= libhalloc/halloc.c minshell.c
-OBJECTS=$(SOURCES:.c=.o)
+LDFLAGS = -lutil -lcurl
+TARGET=lsh
+SRC_DIR = src
+SOURCES := $(shell find $(SRC_DIR) -name '*.c')
+OBJECTS := $(SOURCES:.c=.o)
 
-all: $(TARGET)
+all: $(TARGET) minimize
 
 $(TARGET): $(OBJECTS)
 	$(CC) -o $@ $^ $(LDFLAGS)
@@ -13,6 +14,8 @@ $(TARGET): $(OBJECTS)
 %.o: %.c
 	$(CC) $(CFLAGS) -c $< -o $@
 
+minimize:
+	strip $(TARGET)
 
 clean:
 	rm -rf $(OBJECTS) $(TARGET)

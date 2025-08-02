@@ -1,4 +1,5 @@
 #include "libhalloc/halloc.h"
+#include "lshlib.h"
 #include <ctype.h>
 #include <fcntl.h>
 #include <limits.h>
@@ -34,6 +35,7 @@ void process(char *command[]) {
   }
 
   if (pid == 0) {
+    tcsetattr(STDIN_FILENO, TCSANOW, &orig_set);
     if (execvp(command[0], command) == -1) {
       perror("Command execution failed: ");
       return;
@@ -42,6 +44,7 @@ void process(char *command[]) {
     }
   } else {
     waitpid(pid, NULL, 0);
+    tcsetattr(STDIN_FILENO, TCSANOW, &new_set);
   }
 }
 
@@ -141,6 +144,55 @@ int basic_pipe(char *tokens[], int i) {
   }
   return 0;
 }
+
+void stdlib_parser(char **tokens, int i) {
+  if (strcmp(tokens[i], "runurl") == 0) {
+    char *interpreter = tokens[i + 1];
+    char *url = tokens[i + 2];
+
+    char tmpname[] = "/tmp/runurl_XXXXXX";
+    int tmpfd = mkstemp(tmpname);
+    if (tmpfd == -1) {
+      perror("mkstemp failed");
+      exit(1);
+    }
+
+    pid_t pid1 = fork();
+    if (pid1 == -1) {
+      perror("fork1 failed");
+      exit(1);
+    }
+
+    if (pid1 == 0) {
+      dup2(tmpfd, STDOUT_FILENO);
+      close(tmpfd);
+
+      get_http(url);
+      exit(0);
+    }
+
+    waitpid(pid1, NULL, 0);
+
+    pid_t pid2 = fork();
+    if (pid2 == -1) {
+      perror("fork2 failed");
+      exit(1);
+    }
+
+    if (pid2 == 0) {
+      tcsetattr(STDIN_FILENO, TCSANOW, &orig_set);
+      execlp(interpreter, interpreter, tmpname, NULL);
+      perror("execlp failed");
+      exit(1);
+    }
+
+    waitpid(pid2, NULL, 0);
+    tcsetattr(STDIN_FILENO, TCSANOW, &new_set);
+    unlink(tmpname);
+    close(tmpfd);
+  }
+}
+
 void command_parser(char *command) {
 
   char *tokens[MAX_TOKENS];
@@ -205,8 +257,13 @@ void command_parser(char *command) {
             }
           }
         }
-        execvp(pipetok[0], pipetok);
-        exit(0);
+        if (strcmp(pipetok[0], "runurl") == 0) {
+          stdlib_parser(pipetok, 0);
+        } else {
+          tcsetattr(STDIN_FILENO, TCSANOW, &orig_set);
+          execvp(pipetok[0], pipetok);
+          exit(0);
+        }
       } else {
         close(fd[1]);
         if (start != 0) {
@@ -214,6 +271,7 @@ void command_parser(char *command) {
         }
         prev_fd = fd[0];
         waitpid(pid, NULL, 0);
+        tcsetattr(STDIN_FILENO, TCSANOW, &new_set);
       }
       start = end + 1;
     }
@@ -225,16 +283,25 @@ void command_parser(char *command) {
       for (int i = 0; i < tokenc; i++) {
         basic_pipe(tokens, i);
       }
-      execvp(tokens[0], tokens);
-      perror("exec failed");
-      exit(1);
+      if (strcmp(tokens[0], "runurl") == 0) {
+        stdlib_parser(tokens, 0);
+      } else {
+        tcsetattr(STDIN_FILENO, TCSANOW, &orig_set);
+        execvp(tokens[0], tokens);
+        exit(1);
+      }
     } else {
       waitpid(pid, NULL, 0);
+      tcsetattr(STDIN_FILENO, TCSANOW, &new_set);
     }
   }
 
   if (!special_proc && !its_pipe) {
-    process(tokens);
+    if (strcmp(tokens[0], "runurl") == 0) {
+      stdlib_parser(tokens, 0);
+    } else {
+      process(tokens);
+    }
   }
 
   free_tokens(tokens, tokenc);
