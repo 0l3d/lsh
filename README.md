@@ -1,4 +1,4 @@
-# MINSHELL
+# LSH
 
 Minimalist, Fast and Simple shell in C.
 
@@ -19,8 +19,10 @@ Minimalist, Fast and Simple shell in C.
 ## Installation
 
 ```bash
-gcc minshell.c -o minshell
-./minshell
+git clone https://github.com/0l3d/lsh.git
+cd lsh/
+make
+./lsh
 ```
 
 ## Planned Features
