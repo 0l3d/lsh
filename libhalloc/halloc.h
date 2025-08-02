@@ -1,3 +1,10 @@
+/*
+ * halloc
+ * Copyright (c) 2025 0l3d
+ * https://github.com/0l3d/halloc
+ *
+ * Licensed under the GNU General Public License v3 (GPL-3.0)
+ */
 #include <stddef.h>
 #include <stdlib.h>
 #include <sys/mman.h>

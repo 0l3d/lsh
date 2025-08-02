@@ -1,4 +1,5 @@
 # MINSHELL
+
 Minimalist, Fast and Simple shell in C.
 
 ## Features
@@ -22,15 +23,16 @@ gcc minshell.c -o minshell
 ./minshell
 ```
 
-##  Planned Features
--  Lua Support for Scripting and Configuration.
--  Smarter history support.
--  TAB Completion.
--  Good pipe handling
+## Planned Features
+
+- Lua Support for Scripting and Configuration.
+- Smarter history support.
+- TAB Completion.
 
 # LICENSE
+
 This project is licensed under the **GPL-3.0 License**.
 
---- 
+---
 
 Created By **0l3d**
