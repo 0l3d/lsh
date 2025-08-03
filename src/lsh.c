@@ -121,6 +121,7 @@ void free_tokens(char *tokens[], int count) {
 }
 
 int basic_pipe(char *tokens[], int i) {
+  int saved_stdout = -1;
   if (strcmp(tokens[i], "<") == 0) {
     int fd = open(tokens[i + 1], O_RDONLY);
     if (fd == -1) {
@@ -145,7 +146,7 @@ int basic_pipe(char *tokens[], int i) {
   return 0;
 }
 
-void stdlib_parser(char **tokens, int i) {
+int stdlib_parser(char **tokens, int i) {
   if (strcmp(tokens[i], "runurl") == 0) {
     char *interpreter = tokens[i + 1];
     char *url = tokens[i + 2];
@@ -190,7 +191,13 @@ void stdlib_parser(char **tokens, int i) {
     tcsetattr(STDIN_FILENO, TCSANOW, &new_set);
     unlink(tmpname);
     close(tmpfd);
+  } else if (strcmp(tokens[i], "geturl") == 0) {
+    get_http(tokens[i + 1]);
+    return 0;
+  } else {
+    return -1;
   }
+  return 0;
 }
 
 void command_parser(char *command) {
@@ -257,9 +264,7 @@ void command_parser(char *command) {
             }
           }
         }
-        if (strcmp(pipetok[0], "runurl") == 0) {
-          stdlib_parser(pipetok, 0);
-        } else {
+        if (stdlib_parser(pipetok, 0) != 0) {
           tcsetattr(STDIN_FILENO, TCSANOW, &orig_set);
           execvp(pipetok[0], pipetok);
           exit(0);
@@ -283,9 +288,7 @@ void command_parser(char *command) {
       for (int i = 0; i < tokenc; i++) {
         basic_pipe(tokens, i);
       }
-      if (strcmp(tokens[0], "runurl") == 0) {
-        stdlib_parser(tokens, 0);
-      } else {
+      if (stdlib_parser(tokens, 0) != 0) {
         tcsetattr(STDIN_FILENO, TCSANOW, &orig_set);
         execvp(tokens[0], tokens);
         exit(1);
@@ -296,10 +299,8 @@ void command_parser(char *command) {
     }
   }
 
-  if (!special_proc && !its_pipe) {
-    if (strcmp(tokens[0], "runurl") == 0) {
-      stdlib_parser(tokens, 0);
-    } else {
+  if (!its_pipe && !special_proc) {
+    if (stdlib_parser(tokens, 0) != 0) {
       process(tokens);
     }
   }
@@ -313,10 +314,13 @@ void interface() {
   new_set.c_lflag &= ~(ICANON | ECHO | ISIG);
   tcsetattr(STDIN_FILENO, TCSANOW, &new_set);
 
+  int stdout_backup = dup(STDOUT_FILENO);
+
   char pwd[PATH_MAX];
   if (getcwd(pwd, sizeof(pwd)) == NULL) {
     perror("pwd error");
   }
+  dup2(stdout_backup, STDOUT_FILENO);
   prompt(pwd);
   char *history[100] = {0};
   char command[256] = {0};
@@ -346,12 +350,14 @@ void interface() {
         if (getcwd(pwd, sizeof(pwd)) == NULL) {
           perror("pwd error");
         }
+        dup2(stdout_backup, STDOUT_FILENO);
         prompt(pwd);
         continue;
       } else {
         command_parser(command);
         command_index = 0;
         memset(command, 0, sizeof(command));
+        dup2(stdout_backup, STDOUT_FILENO);
         prompt(pwd);
         continue;
       }
