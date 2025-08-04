@@ -1,5 +1,6 @@
 #include "libhalloc/halloc.h"
 #include "lshlib.h"
+#include "lua/interface.h"
 #include <ctype.h>
 #include <fcntl.h>
 #include <limits.h>
@@ -11,9 +12,6 @@
 #include <sys/wait.h>
 #include <termios.h>
 #include <unistd.h>
-
-// gcc minshell.c -I/usr/include/lua5.4 -L/usr/lib/ -Wl,-Bstatic -llua5.4
-// -Wl,-Bdynamic -lc -lm -o minshell
 
 #define MAX_TOKENS 200
 #define MAX_SUBS 100
@@ -146,6 +144,7 @@ int basic_pipe(char *tokens[], int i) {
   return 0;
 }
 
+int itscript;
 int stdlib_parser(char **tokens, int i) {
   if (strcmp(tokens[i], "runurl") == 0) {
     char *interpreter = tokens[i + 1];
@@ -194,6 +193,14 @@ int stdlib_parser(char **tokens, int i) {
   } else if (strcmp(tokens[i], "geturl") == 0) {
     get_http(tokens[i + 1]);
     return 0;
+  } else if (tokens[i][0] == '.' && tokens[i][1] == '/') {
+    char *dotcontrol = strrchr(tokens[i], '.');
+    if (dotcontrol && strcmp(dotcontrol, ".lshl") == 0) {
+      tcsetattr(STDIN_FILENO, TCSANOW, &orig_set);
+      exec_lua(tokens[i]);
+    } else {
+      return -1;
+    }
   } else {
     return -1;
   }

@@ -1,0 +1,10 @@
+io.write("Number 1: ")
+local num1 = tonumber(io.read())
+
+io.write("Number 2: ")
+local num2 = tonumber(io.read())
+
+local result = num1 + num2
+
+print("Result: " .. result)
+
