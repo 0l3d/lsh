@@ -1,9 +1,13 @@
 #include "libhalloc/halloc.h"
-#include "lshlib.h"
 #include "lua/interface.h"
+#include "lua/mainlib.h"
 #include <ctype.h>
 #include <fcntl.h>
 #include <limits.h>
+#include <linux/limits.h>
+#include <lua5.4/lauxlib.h>
+#include <lua5.4/lua.h>
+#include <lua5.4/lualib.h>
 #include <pty.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -16,35 +20,38 @@
 #define MAX_TOKENS 200
 #define MAX_SUBS 100
 
-struct termios orig_set, new_set;
+struct termios orig_set;
+
+void restore_terminal() { tcsetattr(STDIN_FILENO, TCSANOW, &orig_set); }
+
+void set_raw_terminal() {
+  struct termios raw;
+  tcgetattr(STDIN_FILENO, &raw);
+  raw.c_lflag &= ~(ICANON | ECHO | ISIG);
+  tcsetattr(STDIN_FILENO, TCSANOW, &raw);
+}
+
+extern char *promptshell;
+char pwd[PATH_MAX];
 
 void prompt(char *path) {
-  printf("%s -> ", path);
+  shell_update();
+  change_prompt();
+  if (promptshell != NULL) {
+    printf("%s", promptshell);
+  } else {
+    printf("%s -> ", path);
+  }
   fflush(stdout);
 }
 
-void process(char *command[]) {
-  pid_t pid;
-
-  pid = fork();
-  if (pid == -1) {
-    fprintf(stderr, "forkpty is failed");
-    return;
-  }
-
-  if (pid == 0) {
-    tcsetattr(STDIN_FILENO, TCSANOW, &orig_set);
-    if (execvp(command[0], command) == -1) {
-      perror("Command execution failed: ");
-      return;
-    } else {
-      printf("command is not executed");
-    }
-  } else {
-    waitpid(pid, NULL, 0);
-    tcsetattr(STDIN_FILENO, TCSANOW, &new_set);
+void lua_syntax_sup(char *string) {
+  if (exec_slua(string) != 0) {
+    fprintf(stderr, "Command not found or Lua failed:\n%s\n", string);
   }
 }
+
+int background_process = 0;
 
 int command_lexer(char *bufin, char *bufout[], int max_count) {
   int token_count = 0;
@@ -70,6 +77,12 @@ int command_lexer(char *bufin, char *bufout[], int max_count) {
       subr[1] = '\0';
       bufout[token_count++] = subr;
       p += 1;
+    } else if (*p == '&') {
+      char *sub = halloc_safe(2);
+      sub[0] = '&';
+      sub[1] = '\0';
+      bufout[token_count++] = sub;
+      p++;
     } else if (isspace(*p)) {
       p++;
       continue;
@@ -140,64 +153,23 @@ int basic_pipe(char *tokens[], int i) {
     close(fd);
     tokens[i] = NULL;
     return 1;
+  } else if (strcmp(tokens[i], "&") == 0) {
+    background_process = 1;
+    tokens[i] = NULL;
+    return 1;
   }
   return 0;
 }
 
 int itscript;
-int stdlib_parser(char **tokens, int i) {
-  if (strcmp(tokens[i], "runurl") == 0) {
-    char *interpreter = tokens[i + 1];
-    char *url = tokens[i + 2];
-
-    char tmpname[] = "/tmp/runurl_XXXXXX";
-    int tmpfd = mkstemp(tmpname);
-    if (tmpfd == -1) {
-      perror("mkstemp failed");
-      exit(1);
-    }
-
-    pid_t pid1 = fork();
-    if (pid1 == -1) {
-      perror("fork1 failed");
-      exit(1);
-    }
-
-    if (pid1 == 0) {
-      dup2(tmpfd, STDOUT_FILENO);
-      close(tmpfd);
-
-      get_http(url);
-      exit(0);
-    }
-
-    waitpid(pid1, NULL, 0);
-
-    pid_t pid2 = fork();
-    if (pid2 == -1) {
-      perror("fork2 failed");
-      exit(1);
-    }
-
-    if (pid2 == 0) {
-      tcsetattr(STDIN_FILENO, TCSANOW, &orig_set);
-      execlp(interpreter, interpreter, tmpname, NULL);
-      perror("execlp failed");
-      exit(1);
-    }
-
-    waitpid(pid2, NULL, 0);
-    tcsetattr(STDIN_FILENO, TCSANOW, &new_set);
-    unlink(tmpname);
-    close(tmpfd);
-  } else if (strcmp(tokens[i], "geturl") == 0) {
-    get_http(tokens[i + 1]);
-    return 0;
-  } else if (tokens[i][0] == '.' && tokens[i][1] == '/') {
+int lua_parser(char **tokens, int i) {
+  if (tokens[i][0] == '.' && tokens[i][1] == '/') {
     char *dotcontrol = strrchr(tokens[i], '.');
     if (dotcontrol && strcmp(dotcontrol, ".lshl") == 0) {
-      tcsetattr(STDIN_FILENO, TCSANOW, &orig_set);
+      restore_terminal();
       exec_lua(tokens[i]);
+      set_raw_terminal();
+      prompt(pwd);
     } else {
       return -1;
     }
@@ -208,6 +180,7 @@ int stdlib_parser(char **tokens, int i) {
 }
 
 void command_parser(char *command) {
+  background_process = 0;
 
   char *tokens[MAX_TOKENS];
 
@@ -271,9 +244,10 @@ void command_parser(char *command) {
             }
           }
         }
-        if (stdlib_parser(pipetok, 0) != 0) {
-          tcsetattr(STDIN_FILENO, TCSANOW, &orig_set);
+        if (lua_parser(pipetok, 0) != 0) {
+          restore_terminal();
           execvp(pipetok[0], pipetok);
+          lua_syntax_sup(command);
           exit(0);
         }
       } else {
@@ -282,8 +256,12 @@ void command_parser(char *command) {
           close(prev_fd);
         }
         prev_fd = fd[0];
-        waitpid(pid, NULL, 0);
-        tcsetattr(STDIN_FILENO, TCSANOW, &new_set);
+        if (background_process == 0) {
+          waitpid(pid, NULL, 0);
+        } else {
+          printf("PID: [%d]", pid);
+        }
+        set_raw_terminal();
       }
       start = end + 1;
     }
@@ -295,20 +273,51 @@ void command_parser(char *command) {
       for (int i = 0; i < tokenc; i++) {
         basic_pipe(tokens, i);
       }
-      if (stdlib_parser(tokens, 0) != 0) {
-        tcsetattr(STDIN_FILENO, TCSANOW, &orig_set);
+      if (lua_parser(tokens, 0) != 0) {
+        restore_terminal();
         execvp(tokens[0], tokens);
+        lua_syntax_sup(command);
         exit(1);
       }
     } else {
-      waitpid(pid, NULL, 0);
-      tcsetattr(STDIN_FILENO, TCSANOW, &new_set);
+      if (background_process == 0) {
+        waitpid(pid, NULL, 0);
+      } else {
+        printf("PID: [%d]", pid);
+      }
+      set_raw_terminal();
     }
   }
 
   if (!its_pipe && !special_proc) {
-    if (stdlib_parser(tokens, 0) != 0) {
-      process(tokens);
+    for (int i = 0; i < tokenc; ++i) {
+      basic_pipe(tokens, i);
+    }
+    if (lua_parser(tokens, 0) != 0) {
+      pid_t pid;
+
+      pid = fork();
+      if (pid == -1) {
+        fprintf(stderr, "forkpty is failed");
+        return;
+      }
+
+      if (pid == 0) {
+        restore_terminal();
+        if (execvp(tokens[0], tokens) == -1) {
+          lua_syntax_sup(command);
+          return;
+        } else {
+          printf("command is not executed");
+        }
+      } else {
+        if (background_process == 0) {
+          waitpid(pid, NULL, 0);
+        } else {
+          printf("PID: [%d]", pid);
+        }
+        set_raw_terminal();
+      }
     }
   }
 
@@ -316,16 +325,18 @@ void command_parser(char *command) {
 }
 
 void interface() {
-  tcgetattr(STDIN_FILENO, &orig_set);
-  new_set = orig_set;
-  new_set.c_lflag &= ~(ICANON | ECHO | ISIG);
-  tcsetattr(STDIN_FILENO, TCSANOW, &new_set);
+  if (tcgetattr(STDIN_FILENO, &orig_set) == -1) {
+    perror("tcgetattr failed");
+    return;
+  }
+  set_raw_terminal();
 
   int stdout_backup = dup(STDOUT_FILENO);
 
-  char pwd[PATH_MAX];
   if (getcwd(pwd, sizeof(pwd)) == NULL) {
     perror("pwd error");
+  } else {
+    updatel_cwd();
   }
   dup2(stdout_backup, STDOUT_FILENO);
   prompt(pwd);
@@ -346,6 +357,7 @@ void interface() {
       history_cur = history_i;
 
       if (strcmp(command, "exit") == 0) {
+        restore_terminal();
         break;
       } else if (strncmp(command, "cd ", 3) == 0) { // CD COMMAND
         char *path = command + 3;
@@ -356,6 +368,9 @@ void interface() {
         memset(command, 0, sizeof(command));
         if (getcwd(pwd, sizeof(pwd)) == NULL) {
           perror("pwd error");
+        } else {
+          updatel_cwd();
+          on_cd(pwd);
         }
         dup2(stdout_backup, STDOUT_FILENO);
         prompt(pwd);
@@ -433,7 +448,7 @@ void interface() {
       fflush(stdout);
     }
   }
-  tcsetattr(STDIN_FILENO, TCSANOW, &orig_set);
+  restore_terminal();
 
   for (int i = 0; i < history_i; ++i) {
     free(history[i]);
@@ -441,6 +456,10 @@ void interface() {
 }
 
 int main() {
+  init_lua();
+  exec_slua(mainlibc);
   interface();
+  close_lua();
+  free(promptshell);
   return 0;
 }

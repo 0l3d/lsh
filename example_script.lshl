@@ -1,10 +1,16 @@
-io.write("Number 1: ")
-local num1 = tonumber(io.read())
+local result = execvr("git --version")
+local gitversion = result:match("git version ([%d%.]+)")
 
-io.write("Number 2: ")
-local num2 = tonumber(io.read())
+function update()
+  if gitversion then 
+    prompt = string.format("%s -  %s \n$ ", cwd, gitversion)
+  else 
+    prompt = string.format("%s -  %s \n$ ", cwd, gitversion)
+  end 
+  set_prompt(prompt)
+end
 
-local result = num1 + num2
-
-print("Result: " .. result)
+function on_cd(path)
+  print("new path: ", path);
+end
 

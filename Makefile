@@ -5,7 +5,7 @@ LUA_LIB_STATIC = /usr/lib/liblua5.4.a
 
 LDFLAGS = -I/usr/include/lua5.4 \
           -Wl,-Bstatic $(LUA_LIB_STATIC) -Wl,-Bdynamic \
-          -lc -lm -lcurl
+          -lc -lm
 
 TARGET = lsh
 SRC_DIR = src
