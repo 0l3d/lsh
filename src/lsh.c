@@ -33,6 +33,7 @@ void set_raw_terminal() {
 
 extern char *promptshell;
 char pwd[PATH_MAX];
+extern int lua_running;
 
 void prompt(char *path) {
   shell_update();
@@ -49,6 +50,7 @@ void lua_syntax_sup(char *string) {
   if (exec_slua(string) != 0) {
     fprintf(stderr, "Command not found or Lua failed:\n%s\n", string);
   }
+  exit(0);
 }
 
 int background_process = 0;
@@ -169,7 +171,6 @@ int lua_parser(char **tokens, int i) {
       restore_terminal();
       exec_lua(tokens[i]);
       set_raw_terminal();
-      prompt(pwd);
     } else {
       return -1;
     }
@@ -179,11 +180,30 @@ int lua_parser(char **tokens, int i) {
   return 0;
 }
 
+int builtin_commands(char **tokens, int i) {
+  if (strcmp(tokens[i], "exit") == 0) {
+    restore_terminal();
+    exit(1);
+  } else if (strcmp(tokens[i], "cd") == 0) { // CD COMMAND
+    if (chdir(tokens[i + 1]) != 0) {
+      perror("cd failed");
+    }
+
+    if (getcwd(pwd, sizeof(pwd)) == NULL) {
+      perror("pwd error");
+    } else {
+      updatel_cwd();
+      on_cd(pwd);
+    }
+    return 1;
+  }
+  return 0;
+}
+
 void command_parser(char *command) {
   background_process = 0;
 
   char *tokens[MAX_TOKENS];
-
   // PIPE HANDLING
   int special_proc = 0;
   int its_pipe = 0;
@@ -192,6 +212,11 @@ void command_parser(char *command) {
   // PIPE HANDLING
 
   int tokenc = command_lexer(command, tokens, MAX_TOKENS);
+
+  if (tokenc > 0 && builtin_commands(tokens, 0)) {
+    free_tokens(tokens, tokenc);
+    return;
+  }
 
   for (int i = 0; i < tokenc; i++) {
     if (strcmp(tokens[i], "<") == 0 || strcmp(tokens[i], ">") == 0) {
@@ -347,6 +372,7 @@ void interface() {
   int history_i = 0;
   int history_cur = -1;
   while (1) {
+
     ssize_t n = read(STDIN_FILENO, buffer, 1);
     if (n <= 0)
       continue;
@@ -356,33 +382,13 @@ void interface() {
       history[history_i++] = strdup(command);
       history_cur = history_i;
 
-      if (strcmp(command, "exit") == 0) {
-        restore_terminal();
-        break;
-      } else if (strncmp(command, "cd ", 3) == 0) { // CD COMMAND
-        char *path = command + 3;
-        if (chdir(path) != 0) {
-          perror("cd failed");
-        }
-        command_index = 0;
-        memset(command, 0, sizeof(command));
-        if (getcwd(pwd, sizeof(pwd)) == NULL) {
-          perror("pwd error");
-        } else {
-          updatel_cwd();
-          on_cd(pwd);
-        }
-        dup2(stdout_backup, STDOUT_FILENO);
-        prompt(pwd);
-        continue;
-      } else {
-        command_parser(command);
-        command_index = 0;
-        memset(command, 0, sizeof(command));
-        dup2(stdout_backup, STDOUT_FILENO);
-        prompt(pwd);
-        continue;
-      }
+      command_parser(command);
+      command_index = 0;
+      memset(command, 0, sizeof(command));
+      dup2(stdout_backup, STDOUT_FILENO);
+
+      prompt(pwd);
+      continue;
     } else if (buffer[0] == 8 || buffer[0] == 127) { // BACKSPACE IMPLEMETATION
       if (command_index > 0) {
         command_index--;

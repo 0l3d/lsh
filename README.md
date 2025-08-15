@@ -66,6 +66,19 @@ print("Current time from socket:", socket.gettime())
 - Smarter history support.
 - TAB Completion.
 
+### Notes
+
+i saw a bug in shell, if you type a normal command like `ls` then exit, it works perfectly, but if you type lua code like `print "hello world"` then exit, it doesnt work unless i type it twice, i thought about it for a couple of hours because there s was no explanation for this situation, i wrote some debugs and when i typed an exit, debugs worked, i said wtf? you re getting an exit signal and youre not exiting, why? and i looked at pids and i saw it, lua dostring opens an extra pid for process and doesnt closes it, when i type an exit, im ending lua process, shell is still alive, the bug fix is here:
+
+```
+void lua_syntax_sup(char *string) {
+  if (exec_slua(string) != 0) {
+    fprintf(stderr, "Command not found or Lua failed:\n%s\n", string);
+  }
+  exit(0); // i added this line, if you run a lua process directly in the shell, it will exit properly after finishing.
+}
+```
+
 # LICENSE
 
 This project is licensed under the **GPL-3.0 License**.

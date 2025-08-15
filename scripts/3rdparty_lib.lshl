@@ -1,3 +1,5 @@
 -- luarocks install luasocket --local --lua-version=5.4
 local socket = require("socket")
-print("Current time from socket:", socket.gettime())
+function run() 
+  print("Current time from socket:", socket.gettime())
+end 

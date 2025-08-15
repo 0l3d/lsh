@@ -8,5 +8,6 @@ void updatel_cwd();
 void shell_update();
 void on_cd(const char *path);
 
+extern int lua_running;
 extern char *promptshell;
 extern char pwd[PATH_MAX];

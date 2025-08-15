@@ -11,6 +11,7 @@ char *new_prompt;
 
 char *promptshell = NULL;
 extern char pwd[PATH_MAX];
+int lua_running = 0;
 
 static lua_State *L = NULL;
 
@@ -101,9 +102,12 @@ void exec_lua(const char *filepath) {
   if (!L) {
     init_lua();
   }
+  lua_running = 1;
   if (luaL_dofile(L, filepath)) {
     printf("Error: %s\n", lua_tostring(L, -1));
   }
+  lua_running = 0;
+  return;
 }
 
 int exec_slua(const char *code) {
