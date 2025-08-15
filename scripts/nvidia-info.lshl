@@ -1,0 +1,9 @@
+local temp = trim(execvr("nvidia-smi --query-gpu=temperature.gpu --format=csv,noheader"))
+local fanspeed = trim(execvr("nvidia-smi --query-gpu=fan.speed --format=csv,noheader"))
+local memused = trim(execvr("nvidia-smi --query-gpu=memory.used --format=csv,noheader"))
+
+local temp_c = tonumber(temp)
+local temp_f = math.floor((temp_c * 9 / 5) + 32 + 0.5)
+
+print(string.format("%d °F %s %s", temp_f, fanspeed, memused))
+

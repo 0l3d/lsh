@@ -62,7 +62,7 @@ void on_cd(const char *path) {
   }
 }
 
-// void on_exec() {}
+// void on_exec(const char **tokens) {}
 
 void register_functions() {
   lua_pushcfunction(L, set_prompt);
@@ -77,6 +77,23 @@ void updatel_cwd() {
 void init_lua() {
   L = luaL_newstate();
   luaL_openlibs(L);
+
+  const char *home = getenv("HOME");
+  if (!home)
+    home = ".";
+
+  char lua_path_cmd[512];
+  snprintf(lua_path_cmd, sizeof(lua_path_cmd),
+           "package.path = '%s/.luarocks/share/lua/5.4/?.lua;"
+           "%s/.luarocks/share/lua/5.4/?/init.lua;' .. package.path;"
+           "package.cpath = '%s/.luarocks/lib/lua/5.4/?.so;' .. package.cpath;",
+           home, home, home);
+
+  if (luaL_dostring(L, lua_path_cmd) != LUA_OK) {
+    fprintf(stderr, "Error setting package paths: %s\n", lua_tostring(L, -1));
+    lua_pop(L, 1);
+  }
+
   register_functions();
 }
 

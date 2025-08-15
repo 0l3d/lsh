@@ -21,4 +21,7 @@ const char *mainlibc =
     "function gethttp(url)\n"
     "  local curl_cmd = 'curl -s ' .. url\n"
     "  return execvr(curl_cmd)\n"
+    "end\n"
+    "function trim(s)\n"
+    "  return s:match('^%s*(.-)%s*$')\n"
     "end\n";
