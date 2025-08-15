@@ -53,7 +53,7 @@ print "hello world"
 hello=1; if hello == 1 then print "hello world" end
 ```
 
-also you can use lua libs via luarocks, for example:
+also you can use lua libs installed via luarocks, for example:
 
 ```lua
 -- luarocks install luasocket --local --lua-version=5.4
