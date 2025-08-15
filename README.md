@@ -25,9 +25,44 @@ make
 ./lsh
 ```
 
+## Usage
+
+- **Default Prompt:**
+
+```lua
+PATH -> <command>
+```
+
+- **Execute Lua Script:**  
+  Syntax 1 (run with lshl)
+
+```lua
+./script.lshl
+```
+
+Syntax 2 (run with lua)
+
+```lua
+dofile "script.lshl"
+```
+
+lsh also supports lua syntax like:
+
+```lua
+print "hello world"
+hello=1; if hello == 1 then print "hello world" end
+```
+
+also you can use lua libs via luarocks, for example:
+
+```lua
+-- luarocks install luasocket --local --lua-version=5.4
+local socket = require("socket")
+print("Current time from socket:", socket.gettime())
+```
+
 ## Planned Features
 
-- Lua Support for Scripting and Configuration.
 - Smarter history support.
 - TAB Completion.
 
