@@ -19,7 +19,7 @@ Minimalist, Fast and Simple shell in C.
 ## Installation
 
 ```bash
-git clone https://git.sr.ht/~oled/lsh
+git clone https://github.com/0l3d/lsh
 cd lsh/
 make
 ./lsh
@@ -85,4 +85,4 @@ This project is licensed under the **GPL-3.0 License**.
 
 ---
 
-Created By **oled**
+Created By **0l3d**
